@@ -1,0 +1,604 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.kxt.dao.CourseMapper">
+
+
+	
+	<!-- 课程中心返回的字段 -->
+	<sql id="courseCenterSql">
+		t1.id AS courseId,
+		t1.createTime,
+		t1.enterpriseId,
+		t1.courseName,
+		t1.type AS coursetype,
+		(IFNULL(
+				(SELECT
+					departPrice.sellPrice
+				FROM
+					kttx_course_price departPrice
+				WHERE
+				  price.courseId=departPrice.courseId
+				  AND departPrice.enterpriseId = #{enterpriseId}
+                  and
+				 departPrice.enterpriseType = 'ENTERPRISE'
+				
+				<choose>
+			    <when test="userDepartId !=null and userDepartId !=''">
+			     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+			    </when>
+			    <otherwise>
+			     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+			    </otherwise>
+			  </choose>
+				)
+			,price.sellPrice)) as sellPrice,
+		t1.city,
+		t1.startTime,
+		t1.endTime,
+		statistic.signupNum,
+		statistic.judgeAverage
+	</sql>
+	
+	<!-- 课程中心查询条件-->
+	<sql id="courseCenterWhereSql">
+		 <!-- 过滤过期的面授课 -->
+		AND ((t1.type=5 and t1.endTime>=NOW())or t1.type!=5)
+        
+         <!-- 过滤类别 -->
+		<if test=" categoryNameList != null and categoryNameList.size > 0">
+
+			AND EXISTS (select 1 from kttx_course_category t3
+			where t1.id=t3.courseId and t3.enterpriseId = #{enterpriseId}
+			AND t3.enterpriseType = 'ENTERPRISE' and category in
+			<foreach collection="categoryNameList" index="index" item="item"
+				open="(" separator="," close=")">
+				#{item}
+			</foreach>
+			)
+		</if>
+		
+		<!-- 只有直播和视频课程有有开始时间 -->
+		<if test="startTime!=null">
+			and t1.type!=3 and t1.startTime &gt;= #{startTime}
+		</if>
+		<if test="endTime != null">
+			and t1.type!=3 and t1.startTime &lt;= #{endTime}
+		</if>
+		
+		<!-- 只有面授课才有地点 -->
+		<if test=" city != null and city != '' ">
+			and t1.type=5 and t1.city LIKE CONCAT('%',#{city},'%')
+		</if>
+		<if test=" citysList != null and citysList != ''">
+		and t1.type=5 
+			<foreach collection="citysList" index="index" item="item"
+				open=" " separator=" " close=" ">
+				and t1.city NOT LIKE
+				CONCAT('%',#{item},'%')
+			</foreach>
+		</if>
+		<if test=" courseType != null and courseType != '' ">
+			and t1.type=#{courseType}
+		</if>
+		<if test="keyword != null and keyword != ''">
+				and (
+				t1.courseName LIKE #{keyword}
+				or
+				t1.label LIKE #{keyword}
+				)
+		</if>
+	</sql>
+
+	<!-- 课程中心查询课程 -->
+	<select id="selectCourseCenter" parameterType="map"
+		resultType="com.kxt.domain.CourseCenterEntity">
+		SELECT
+		*
+		from
+        <!-- 查询外部课程 -->
+		(
+		<!-- 判断要不要查询外部课程 -->
+		<if test="enterpriseType=='kttx'">
+		SELECT
+		<include refid="courseCenterSql"></include>
+		FROM
+		kttx_course t1
+		LEFT JOIN kttx_course_statistic_info statistic ON statistic.sourceCourseId
+		= t1.sourceCourseId
+		LEFT JOIN kttx_course_price price
+		ON price.courseId = t1.id
+		AND price.enterpriseId = #{enterpriseId}
+		AND price.enterpriseType = 'ENTERPRISE'
+		WHERE 1=1
+		AND EXISTS (select 1 from kttx_course_distribute t2
+		WHERE t1.id=t2.courseId and t2.enterpriseId = #{enterpriseId}
+		AND t2. STATUS = 'ENABLE')
+
+      <include refid="courseCenterWhereSql"></include>
+
+        <!-- 过滤课程类型 -->
+		<if test="courseTypes !=null and courseTypes.size > 0 ">
+			and t1.type in
+			<foreach item="item" index="index" collection="courseTypes"
+				open="(" separator="," close=")">
+				#{item}
+			</foreach>
+		</if>
+		 GROUP BY t1.id
+		UNION
+		</if>
+		<!-- 查询内部课程 -->
+		SELECT
+		<include refid="courseCenterSql"></include>
+		FROM
+		kttx_course t1
+		LEFT JOIN kttx_course_statistic_info statistic ON statistic.sourceCourseId
+		= t1.sourceCourseId
+		LEFT JOIN kttx_course_status STATUS ON STATUS.courseId = t1.id
+		LEFT JOIN kttx_course_price price
+		ON price.courseId = t1.id
+		AND price.enterpriseId = #{enterpriseId}
+		AND price.enterpriseType = 'ENTERPRISE'
+		
+		<!-- 课程指定用户组可见 -->
+		<if test="isvisible">
+		left join kttx_department_relate departRelate on
+		departRelate.relateId =
+		t1.id
+		</if>
+		
+		WHERE 1=1
+
+		
+		AND t1.enterpriseId =#{enterpriseId}
+		AND t1.enterpriseType = 'ENTERPRISE'
+		AND STATUS .enterpriseType = 'ENTERPRISE'
+		AND STATUS .enterpriseId = #{enterpriseId}
+		and STATUS .isvisible != 3
+		and STATUS.state =2
+        <include refid="courseCenterWhereSql"></include>
+        <!-- 过滤课程，针对制定用户组可见的用户展示课程 -->
+		<if test="isvisible">
+			and (STATUS.isvisible !=2 or
+			departRelate.departmentId=#{userDepartId})
+		</if>
+		<!-- 可见范围 -->
+		<if test="visibleList !=null and visibleList.size > 0 ">
+				and STATUS.isvisible in
+				<foreach item="item" index="index" collection="visibleList"
+					open="(" separator="," close=")">
+					#{item}
+				</foreach>
+	   </if>
+	    GROUP BY t1.id
+		) T
+		WHERE
+		1=1
+		<if test=" priceFloor != null and priceFloor != '' ">
+			and T.sellPrice &gt;= #{priceFloor}
+		</if>
+		<if test=" priceCeiling != null and priceCeiling != '' ">
+			and T.sellPrice &lt;= #{priceCeiling}
+		</if>
+		
+		<if test=" sellPrice != null and sellPrice == 0 ">
+			and T.sellPrice = #{sellPrice} 
+		</if>
+        <if test="orderRule !=null">
+			order by ${orderRule}
+		</if>
+		<if test="orderRule == null">
+			ORDER BY T.startTime desc
+		</if>
+	</select>
+	
+	
+	
+	<!-- 查询外部课程返回课程ID -->
+	<select id="selectDistributeIds" parameterType="map" resultType="String">
+	    SELECT
+			t1.id
+		FROM
+			kttx_course t1
+		left join kttx_course_distribute t2 on t1.id = t2.courseId
+		WHERE
+			1 = 1
+	    <!-- 外部课程条件 -->
+		AND t2.enterpriseId = #{enterpriseId}
+			AND t2. STATUS = 'ENABLE'
+		<!-- 过滤去过期的面授课 -->
+		AND (
+			(
+				t1.type = 5
+				AND t1.endTime >= NOW()
+			)
+			OR t1.type != 5
+		)
+		
+		 <!-- 过滤类别 -->
+		<if test=" categoryNameList != null and categoryNameList.size > 0">
+
+			AND EXISTS (select 1 from kttx_course_category t3
+			where t1.id=t3.courseId and t3.enterpriseId = #{enterpriseId}
+			AND t3.enterpriseType = 'ENTERPRISE' and category in
+			<foreach collection="categoryNameList" index="index" item="item"
+				open="(" separator="," close=")">
+				#{item}
+			</foreach>
+			)
+		</if>
+		
+		<!-- 只有直播和视频课程有有开始时间 -->
+		<if test="startTime!=null">
+			and t1.type!=3 and t1.startTime &gt;= #{startTime}
+		</if>
+		<if test="endTime != null">
+			and t1.type!=3 and t1.startTime &lt;= #{endTime}
+		</if>
+		
+		<!-- 只有面授课才有地点 -->
+		<if test=" city != null and city != '' ">
+			and t1.type=5 and t1.city LIKE CONCAT('%',#{city},'%')
+		</if>
+		<if test=" citysList != null and citysList != ''">
+		and t1.type=5 
+			<foreach collection="citysList" index="index" item="item"
+				open=" " separator=" " close=" ">
+				and t1.city NOT LIKE
+				CONCAT('%',#{item},'%')
+			</foreach>
+		</if>
+		<if test=" courseType != null and courseType != '' ">
+			and t1.type=#{courseType}
+		</if>
+		<if test="keyword != null and keyword != ''">
+				and (
+				t1.courseName LIKE #{keyword}
+				or
+				t1.label LIKE #{keyword}
+				)
+		</if>
+		
+		<!-- 过滤价格 -->
+		<if test=" priceFloor != null and priceFloor != '' ">
+		AND EXISTS (
+			select 
+			1 
+			from kttx_course_price departPrice,kttx_course_price price
+			where price.courseId = t1.id and  t1.id=departPrice.courseId
+			<choose>
+		    <when test="userDepartId !=null and userDepartId !=''">
+		     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+		    </when>
+		    <otherwise>
+		     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+		    </otherwise>
+		  </choose>
+			AND price.enterpriseId = 102 AND price.enterpriseType = 'ENTERPRISE'
+			and IFNULL(departPrice.sellPrice,price.sellPrice) &gt;= #{priceFloor}) 
+		</if>
+		
+		<if test=" priceCeiling != null and priceCeiling != '' ">
+		AND EXISTS (
+			select 
+			1 
+			from kttx_course_price departPrice,kttx_course_price price
+			where price.courseId = t1.id and  t1.id=departPrice.courseId
+			<choose>
+		    <when test="userDepartId !=null and userDepartId !=''">
+		     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+		    </when>
+		    <otherwise>
+		     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+		    </otherwise>
+		  </choose>
+			AND price.enterpriseId = 102 AND price.enterpriseType = 'ENTERPRISE'
+			and IFNULL(departPrice.sellPrice,price.sellPrice) &lt;= #{priceCeiling}) 
+		</if>
+		
+		<if test=" sellPrice != null and sellPrice == 0 ">
+			AND EXISTS (
+			select 
+			1 
+			from kttx_course_price departPrice,kttx_course_price price
+			where price.courseId = t1.id and  t1.id=departPrice.courseId
+			<choose>
+		    <when test="userDepartId !=null and userDepartId !=''">
+		     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+		    </when>
+		    <otherwise>
+		     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+		    </otherwise>
+		  </choose>
+			AND price.enterpriseId = 102 AND price.enterpriseType = 'ENTERPRISE'
+			and IFNULL(departPrice.sellPrice,price.sellPrice) = #{sellPrice} )
+		</if>
+		
+		GROUP BY
+			t1.id
+	</select>
+	
+	<!-- 内部课程 -->
+	<select id="selectEnterCourses" parameterType="map" resultType="String">
+	   SELECT
+		  t1.id
+		FROM
+		kttx_course t1
+		LEFT JOIN kttx_course_status STATUS ON STATUS.courseId = t1.id
+		WHERE 
+		 t1.enterpriseId =#{enterpriseId}
+		AND t1.enterpriseType = 'ENTERPRISE'
+		AND STATUS .enterpriseType = 'ENTERPRISE'
+		AND STATUS .enterpriseId = #{enterpriseId}
+		and STATUS .isvisible != 3
+		and STATUS.state =2
+         <!-- 过滤过期的面授课 -->
+		AND ((t1.type=5 and t1.endTime>=NOW())or t1.type!=5)
+        
+         <!-- 过滤类别 -->
+		<if test=" categoryNameList != null and categoryNameList.size > 0">
+
+			AND EXISTS (select 1 from kttx_course_category t3
+			where t1.id=t3.courseId and t3.enterpriseId = #{enterpriseId}
+			AND t3.enterpriseType = 'ENTERPRISE' and category in
+			<foreach collection="categoryNameList" index="index" item="item"
+				open="(" separator="," close=")">
+				#{item}
+			</foreach>
+			)
+		</if>
+		
+		<!-- 只有直播和视频课程有有开始时间 -->
+		<if test="startTime!=null">
+			and t1.type!=3 and t1.startTime &gt;= #{startTime}
+		</if>
+		<if test="endTime != null">
+			and t1.type!=3 and t1.startTime &lt;= #{endTime}
+		</if>
+		
+		<!-- 只有面授课才有地点 -->
+		<if test=" city != null and city != '' ">
+			and t1.type=5 and t1.city LIKE CONCAT('%',#{city},'%')
+		</if>
+		<if test=" citysList != null and citysList != ''">
+		and t1.type=5 
+			<foreach collection="citysList" index="index" item="item"
+				open=" " separator=" " close=" ">
+				and t1.city NOT LIKE
+				CONCAT('%',#{item},'%')
+			</foreach>
+		</if>
+		<if test=" courseType != null and courseType != '' ">
+			and t1.type=#{courseType}
+		</if>
+		<if test="keyword != null and keyword != ''">
+				and (
+				t1.courseName LIKE #{keyword}
+				or
+				t1.label LIKE #{keyword}
+				)
+		</if>
+        <!-- 过滤课程，针对制定用户组可见的用户展示课程 -->
+		<if test="isvisible">
+		and (STATUS.isvisible !=2 or
+		 EXISTS (
+			select 
+			1
+			from  kttx_department_relate departRelate
+			where departRelate.relateId =t1.id
+			and departRelate.departmentId=#{userDepartId}
+			)
+		)
+		</if>
+		
+		<!-- 过滤价格 -->
+		<if test=" priceFloor != null and priceFloor != '' ">
+		AND EXISTS (
+			select 
+			1 
+			from kttx_course_price departPrice,kttx_course_price price
+			where price.courseId = t1.id and  t1.id=departPrice.courseId
+			<choose>
+		    <when test="userDepartId !=null and userDepartId !=''">
+		     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+		    </when>
+		    <otherwise>
+		     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+		    </otherwise>
+		  </choose>
+			AND price.enterpriseId = 102 AND price.enterpriseType = 'ENTERPRISE'
+			and IFNULL(departPrice.sellPrice,price.sellPrice) &gt;= #{priceFloor}) 
+		</if>
+		
+		<if test=" priceCeiling != null and priceCeiling != '' ">
+		AND EXISTS (
+			select 
+			1 
+			from kttx_course_price departPrice,kttx_course_price price
+			where price.courseId = t1.id and  t1.id=departPrice.courseId
+			<choose>
+		    <when test="userDepartId !=null and userDepartId !=''">
+		     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+		    </when>
+		    <otherwise>
+		     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+		    </otherwise>
+		  </choose>
+			AND price.enterpriseId = 102 AND price.enterpriseType = 'ENTERPRISE'
+			and IFNULL(departPrice.sellPrice,price.sellPrice) &lt;= #{priceCeiling}) 
+		</if>
+		
+		<if test=" sellPrice != null and sellPrice == 0 ">
+			AND EXISTS (
+			select 
+			1 
+			from kttx_course_price departPrice,kttx_course_price price
+			where price.courseId = t1.id and  t1.id=departPrice.courseId
+			<choose>
+		    <when test="userDepartId !=null and userDepartId !=''">
+		     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+		    </when>
+		    <otherwise>
+		     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+		    </otherwise>
+		  </choose>
+			AND price.enterpriseId = 102 AND price.enterpriseType = 'ENTERPRISE'
+			and IFNULL(departPrice.sellPrice,price.sellPrice) = #{sellPrice} )
+		</if>
+	    GROUP BY t1.id
+	</select>
+	
+	<resultMap id="courseResultMap" type="com.kxt.domain.CourseEntity">
+		<id property="id" column="id" javaType="string" jdbcType="VARCHAR"
+			typeHandler="org.apache.ibatis.type.StringTypeHandler" />
+		<result property="courseBasicsId" column="courseBasicsId" />
+		<result property="sourceCourseId" column="sourceCourseId" />
+		<result property="type" column="type" />
+		<result property="enterpriseType" column="enterpriseType" />
+		<result property="enterpriseId" column="enterpriseId" />
+		<result property="userId" column="userId" />
+		<result property="courseName" column="courseName" />
+		<result property="label" column="courseBasics_label" />
+		<result property="detail" column="courseBasics_detail" />
+		<result property="label" column="label" />
+		<result property="industry" column="industry" />
+		<result property="positionLevel" column="positionLevel" />
+		<result property="coursePicture" column="coursePicture" />
+		<result property="upperLimit" column="upperLimit" />
+		<result property="detail" column="detail" />
+		<result property="lecturer" column="lecturer" />
+		<result property="lecturerTelephone" column="lecturerTelephone" />
+		<result property="lecturerInfo" column="courseBasics_lecturerInfo" />
+		<result property="lecturerInfo" column="lecturerInfo" />
+		<result property="relatedInternalCourse" column="relatedInternalCourse" />
+		<result property="qRCode" column="qRCode" />
+		<result property="createTime" column="createTime" />
+		<result property="vodId" column="vodId" />
+		<result property="courseHour" column="courseHour" />
+		<result property="courseScore" column="courseScore" />
+		<result property="vodName" column="vodName" />
+		<result property="videoType" column="videoType" />
+		<result property="isAlreadyEvalated" column="isAlreadyEvalated" />
+		<result property="scoreCondition" column="scoreCondition" />
+		<result property="originType" column="originType" />
+		<result property="originId" column="originId" />
+		<result property="enterpriseName" column="enterpriseName" />
+		<result property="organName" column="organName" />
+		<result property="distributeNum" column="distributeNum" />
+		<result property="isPriceModified" column="isPriceModified" />
+		<result property="modifiedPrice" column="modifiedPrice" />
+		<result property="adminUserId" column="adminUserId" />
+		<result property="stepCount" column="stepCount" />
+		<result property="relatedInternalCourse" column="relatedInternalCourse" />
+		<result property="cooperationLecturerState" column="cooperationLecturerState" />
+		<result property="courseDistrubuteStatus" column="courseDistrubuteStatus" />
+		<association property="coursePropertyEntity" column="prop_courseId"
+			javaType="com.kxt.domain.CoursePropertyEntity">
+			<id property="id" column="prop_id" />
+			<id property="courseId" column="prop_courseId" />
+			<result property="startTime" column="prop_startTime" />
+			<result property="endTime" column="prop_endTime" />
+			<result property="signupCloseTime" column="prop_signupCloseTime" />
+			<result property="city" column="prop_city" />
+			<result property="place" column="prop_place" />
+			<result property="isReward" column="prop_isReward" />
+			<result property="rewardQRcode" column="prop_rewardQRcode" />
+		</association>
+		<association property="courseStatisticEntity" column="statistic_sourceCourseId"
+			javaType="com.kxt.domain.CourseStatisticEntity">
+			<id property="id" column="statistic_id" />
+			<result property="sourceCourseId" column="statistic_sourceCourseId" />
+			<result property="viewNum" column="statistic_viewNum" />
+			<result property="shareNum" column="statistic_shareNum" />
+			<result property="signupNum" column="statistic_signupNum" />
+			<result property="attentionNum" column="statistic_attentionNum" />
+			<result property="commentNum" column="statistic_commentNum" />
+			<result property="interlocutionNum" column="statistic_interlocutionNum" />
+			<result property="treadNum" column="statistic_treadNum" />
+			<result property="praiseNum" column="statistic_praiseNum" />
+			<result property="interactNum" column="statistic_interactNum" />
+			<result property="questionNum" column="statistic_questionNum" />
+			<result property="judgeNum" column="statistic_judgeNum" />
+			<result property="judgeAverage" column="statistic_judgeAverage" />
+		</association>
+		<association property="coursePriceEntity" column="course_priceId"
+			javaType="com.kxt.domain.CoursePriceEntity">
+			<id property="id" column="course_priceId" />
+			<result property="courseId" column="courseId" />
+			<result property="enterpriseType" column="enterpriseType" />
+			<result property="enterpriseId" column="enterpriseId" />
+			<result property="referId" column="referId" />
+			<result property="referType" column="referType" />
+			<result property="distributePrice" column="distributePrice" />
+			<result property="sellPrice" column="sellPrice" />
+		</association>
+	</resultMap>
+	<!-- 根据课程ID查询课程信息 -->
+	<select id="searchCourseList" parameterType="map" resultMap="courseResultMap">
+	  SELECT
+	    t1.id,
+	    t1.courseName,
+		t1.coursePicture,
+		t1.type,
+		t1.courseBasicsId,
+		t1.sourceCourseId,
+		t1.createTime,
+		t1.startTime as prop_startTime,
+        t1.endTime as prop_endTime,
+        t1.city as prop_city,
+		statistic.id as statistic_id,
+		statistic.viewNum as statistic_viewNum,
+		statistic.signupNum as
+		statistic_signupNum,
+		statistic.judgeAverage as
+		statistic_judgeAverage,
+		(IFNULL(
+				(SELECT
+					departPrice.sellPrice
+				FROM
+					kttx_course_price departPrice
+				WHERE
+					departPrice.courseId = t1.id
+				AND departPrice.enterpriseType = 'ENTERPRISE'
+				AND departPrice.enterpriseId = #{enterpriseId}
+				<choose>
+			    <when test="userDepartId !=null and userDepartId !=''">
+			     and departPrice.referId=#{userDepartId} and departPrice.referType='DEPARTMENT'
+			    </when>
+			    <otherwise>
+			     and departPrice.referId=#{enterpriseId} and departPrice.referType='ENTERPRISE'
+			    </otherwise>
+			  </choose>
+				)
+			,price.sellPrice)) as sellPrice
+	  FROM kttx_course t1
+		
+		left join kttx_course_statistic_info statistic on
+		statistic.sourceCourseId
+		= t1.sourceCourseId
+		<!-- 课程在所在用户组的价格 -->
+		left join
+		kttx_course_price price on t1.id = price.courseId
+		and price.enterpriseType=#{enterpriseType} and price.enterpriseId=#{enterpriseId}
+		 and price.referId=#{enterpriseId} and price.referType='ENTERPRISE'
+		
+	  <where>
+	   <if test="courseIdList !=null and courseIdList.size > 0 ">
+				and t1.id in
+				<foreach item="item" index="index" collection="courseIdList"
+					open="(" separator="," close=")">
+					#{item}
+				</foreach>
+		</if>
+		 <if test="orderRule !=null">
+			order by ${orderRule}
+		</if>
+		<if test="orderRule == null">
+			ORDER BY t1.startTime desc
+		</if>
+		</where> 
+		
+		
+	</select>
+	
+</mapper>

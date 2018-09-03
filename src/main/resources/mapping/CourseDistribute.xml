@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.kxt.dao.CourseDistributeMapper">
+
+
+   
+    
+    <!-- 查询分发表的课程信息 -->
+	<select id="selectDistributeIds" resultType="com.kxt.domain.CourseDistributeEntity" parameterType="map">
+	  SELECT
+	    t1.courseId,
+		t1.id,
+		t1.readOrNot	
+	  from 	kttx_course_distribute t1		
+		WHERE
+		
+		
+		 t1.enterpriseId = #{enterpriseId}
+         and t1.status = #{status}
+		     AND EXISTS (
+	        SELECT
+	        1
+	        FROM
+	        kttx_course t2
+	        WHERE
+	        t2.id = t1.courseId
+	        AND t2.type = 3
+	        )
+		group by t1.courseId
+		order by t1.readOrNot desc,t1.id desc
+	</select>
+	
+	
+	 <resultMap id="BaseResultMap" type="com.kxt.domain.CourseDistributeEntity">
+            <id property="id" column="distribute_id"/>
+            <result property="courseId" column="distribute_courseId"/>
+            <result property="sourceCourseId" column="distribute_sourceCourseId"/>
+            <result property="enterpriseId" column="distribute_enterpriseId"/>
+            <result property="status" column="distribute_status"/>
+            <result property="readOrNot" column="distribute_readOrNot"/>
+            <result property="createTime" column="distribute_createTime"/>
+
+        <association property="courseEntity" column="course_id"
+                     javaType="com.kxt.domain.CourseEntity" >
+                     <id property="id" column="id" javaType="string" jdbcType="VARCHAR"
+			typeHandler="org.apache.ibatis.type.StringTypeHandler" />
+		<result property="courseBasicsId" column="courseBasicsId" />
+		<result property="sourceCourseId" column="sourceCourseId" />
+		<result property="type" column="type" />
+		<result property="enterpriseType" column="enterpriseType" />
+		<result property="enterpriseId" column="enterpriseId" />
+		<result property="userId" column="userId" />
+		<result property="courseName" column="courseName" />
+		<result property="label" column="courseBasics_label" />
+		<result property="detail" column="courseBasics_detail" />
+		<result property="label" column="label" />
+		<result property="industry" column="industry" />
+		<result property="positionLevel" column="positionLevel" />
+		<result property="coursePicture" column="coursePicture" />
+		<result property="upperLimit" column="upperLimit" />
+		<result property="detail" column="detail" />
+		<result property="lecturer" column="lecturer" />
+		<result property="lecturerTelephone" column="lecturerTelephone" />
+		<result property="lecturerInfo" column="courseBasics_lecturerInfo" />
+		<result property="lecturerInfo" column="lecturerInfo" />
+		<result property="relatedInternalCourse" column="relatedInternalCourse" />
+		<result property="qRCode" column="qRCode" />
+		<result property="createTime" column="createTime" />
+		<result property="vodId" column="vodId" />
+		<result property="courseHour" column="courseHour" />
+		<result property="courseScore" column="courseScore" />
+		<result property="vodName" column="vodName" />
+		<result property="videoType" column="videoType" />
+		<result property="isAlreadyEvalated" column="isAlreadyEvalated" />
+		<result property="scoreCondition" column="scoreCondition" />
+		<result property="originType" column="originType" />
+		<result property="originId" column="originId" />
+		<result property="enterpriseName" column="enterpriseName" />
+		<result property="organName" column="organName" />
+		<result property="distributeNum" column="distributeNum" />
+		<result property="isPriceModified" column="isPriceModified" />
+		<result property="modifiedPrice" column="modifiedPrice" />
+		<result property="adminUserId" column="adminUserId" />
+		<result property="stepCount" column="stepCount" />
+		<result property="relatedInternalCourse" column="relatedInternalCourse" />
+		<result property="cooperationLecturerState" column="cooperationLecturerState" />
+		<result property="courseDistrubuteStatus" column="courseDistrubuteStatus" />
+        </association>
+
+    </resultMap>
+    
+	
+	<select id="selectDistributeEnableCourseList" parameterType="map" resultMap="BaseResultMap">
+        SELECT
+        course.id,
+        course.createTime,
+        course.courseHour,
+        course.courseScore,
+        course.type,
+        course.courseName,
+        course.city as prop_city,
+        course.startTime as prop_startTime,
+        t2.id as distribute_id
+        FROM
+        kttx_course course
+        left join kttx_course_distribute t2 on course.id=t2.courseId 
+        WHERE
+        1 = 1
+        and t2.enterpriseId = #{enterpriseId}
+		AND t2. STATUS = 'ENABLE'
+        order by course.createTime desc	
+    </select>
+	
+	
+</mapper>

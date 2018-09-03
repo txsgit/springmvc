@@ -1,0 +1,198 @@
+﻿<!DOCTYPE html>
+<HTML>
+ <HEAD>
+  <TITLE> ZTREE DEMO </TITLE>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  
+  <link rel="stylesheet" href="zTreeStyle/zTreeStyle.css" type="text/css">
+  <script type="text/javascript" src="jquery.js"></script>
+  <script type="text/javascript" src="jquery.ztree.core.js"></script>
+  <script type="text/javascript" src="jquery.ztree.exedit.js"></script>
+  <SCRIPT type="text/javascript">
+		
+		
+		var setting = {
+			view: {
+				showLine: false,//设置 zTree 是否显示节点之间的连线。默认值：true
+				showIcon: false,//设置 zTree 是否显示节点的图标。默认值：true
+				selectedMulti: false,//设置是否允许同时选中多个节点。默认值: true
+				dblClickExpand: false,//双击节点时，是否自动展开父节点的标识 默认值: true
+				addDiyDom: addDiyDom,//用于在节点上固定显示用户自定义控件
+				addHoverDom: addHoverDom,//用于当鼠标移动到节点上时，显示用户自定义控件，显示隐藏状态同 zTree 内部的编辑、删除按钮
+				removeHoverDom: removeHoverDom//鼠标移动上离开之后去掉
+			},
+			data: {
+				simpleData: {
+					enable: true
+				}
+			},
+			callback: {
+			   onClick: zTreeOnClick,//捕获节点被点击回调函数
+			   onRightClick: zTreeOnRightClick
+			}
+		};
+
+		var zNodes =[
+			{ id:1, pId:0, name:"文件夹", open:true},
+			{ id:11, pId:1, name:"收件箱asdadadasdasdasdasdasdadadasd(11)"},
+			{ id:111, pId:11, name:"收件箱1"},
+			{ id:112, pId:111, name:"收件箱2"},
+			{ id:113, pId:112, name:"收件箱3"},
+			{ id:114, pId:113, name:"收件箱4"},
+			{ id:12, pId:1, name:"垃圾邮件(12)"},
+			{ id:13, pId:1, name:"草稿(13)"},
+			{ id:14, pId:1, name:"已发送邮件(14)"},
+			{ id:15, pId:1, name:"已删除邮件(15)"}
+		];
+		//鼠标移动上加载控件
+		function addHoverDom(treeId, treeNode) {
+			//if (treeNode.parentNode && treeNode.parentNode.id!=1) return;
+			//去掉其他的
+			console.log("add:"+treeNode.id);
+			var aObj = $("#" + treeNode.tId + "_a");
+			if ($("#diyBtn_"+treeNode.id).length>0) return;
+				var editStr = "<span class='button icon03' onClick='showMenu(this)' id='diyBtn_" +treeNode.id+ "' title='"+treeNode.name+"' data-id='"+treeNode.id+"'></span>";
+				aObj.append(editStr);
+				//var btn = $("#diyBtn_"+treeNode.id);
+				//if (btn) btn.bind("click", showMenu(this));
+			
+		}
+		
+		//右击鼠标
+		function zTreeOnRightClick(event, treeId, treeNode) {
+          alert(1)
+      };
+		//显示菜单
+		function showMenu(obj)
+		{
+		var rMenu = $("#rMenu");
+		  // alert($(obj).attr("data-id"));
+		  var self = $(obj); //当前对象  
+		    var p = self.position(); //获取这个元素的left和top    
+        var x = p.left + self.width();//获取这个浮动层的left    
+        var docWidth = $(document).width();//获取网页的宽    
+        if (x > docWidth - rMenu.width() - 20) {    
+            x = p.left - rMenu.width();    
+        }    
+		
+        rMenu.css("left", x);    
+        rMenu.css("top", p.top+20);   
+		//   $("#rMenu").show();
+			
+		}
+		//鼠标移开删除
+		function removeHoverDom(treeId, treeNode) {
+			//if (treeNode.parentTId && treeNode.getParentNode().id!=1) return;
+			console.log("remove:"+treeNode.id);
+			$("#diyBtn_"+treeNode.id).unbind().remove();
+			$("#diyBtn_space_" +treeNode.id).unbind().remove();
+			//隐藏菜单
+			//$("#rMenu").hide();
+		}
+
+		//加载控件
+		function addDiyDom(treeId, treeNode) {
+			var spaceWidth = 5;
+			//获取图标
+			var switchObj = $("#" + treeNode.tId + "_switch"),
+			//节点图标
+			icoObj = $("#" + treeNode.tId + "_ico");
+			switchObj.remove();
+			icoObj.before(switchObj);
+
+			if (treeNode.level > 1) {
+				var spaceStr = "<span style='display: inline-block;width:" + (spaceWidth * treeNode.level)+ "px'></span>";
+				switchObj.before(spaceStr);
+			}
+		}
+
+		//节点点击事件
+		function zTreeOnClick(event, treeId, treeNode) {
+            $("#log_down").append("<li >"+treeNode.name+"</li>");
+          };
+
+		$(document).ready(function(){
+			var treeObj = $("#treeDemo");
+			//初始化ztree，将ztree加载ID和ztree的属性，和json数据加载
+			$.fn.zTree.init(treeObj, setting, zNodes);
+			//得到ztree对象
+			//zTree_Menu = $.fn.zTree.getZTreeObj("treeDemo");
+		//	curMenu = zTree_Menu.getNodes()[0].children[0].children[0];
+			//zTree_Menu.selectNode(curMenu);
+			//添加图标
+         //  treeObj.addClass("showIcon");
+			
+		});
+		
+	</SCRIPT>
+<style type="text/css">
+	div.content_wrap {
+     width: 600px; 
+    height: 380px;
+}
+div.content_wrap div.left {
+    float: left;
+    width: 250px;
+}
+div.content_wrap div.right {
+    float: right;
+    width: 340px;
+	border: 1px solid #617775;
+	height: 160px;
+    overflow-y: scroll;
+    overflow-x: auto;
+}
+div.zTreeDemoBackground {
+    width: 250px;
+    height: 362px;
+    text-align: left;
+}
+ul.ztree {
+    margin-top: 10px;
+    border: 1px solid #617775;
+    background: #f0f6e4;
+    width: 220px;
+    height: 360px;
+    overflow-y: scroll;
+    overflow-x: auto;
+}
+
+
+div#rMenu {position:absolute; display:none; top:0; background-color: #555;text-align: left;padding: 2px;}
+div#rMenu ul li{
+	margin: 0;
+	padding: 0;
+	cursor: pointer;
+	list-style: none outside none;
+	background-color: #DFDFDF;
+}
+div,ul{
+margin: 0;
+	padding: 0;
+}
+
+	</style>
+ </HEAD>
+
+<BODY>
+<h1>ztree</h1>
+
+<div class="content_wrap">
+	<div class="zTreeDemoBackground left">
+		<ul id="treeDemo" class="ztree"></ul>
+	</div>
+	<div class="right">
+	    <ul id="log_down" class="log small"></ul>
+	</div>
+</div>
+<div id="rMenu">
+	<ul>
+		<li id="m_add" onclick="addTreeNode();">增加节点</li>
+		<li id="m_del" onclick="removeTreeNode();">删除节点</li>
+		<li id="m_check" onclick="checkTreeNode(true);">Check节点</li>
+		<li id="m_unCheck" onclick="checkTreeNode(false);">unCheck节点</li>
+		<li id="m_reset" onclick="resetTree();">恢复zTree</li>
+	</ul>
+</div>
+</BODY>
+</HTML>
